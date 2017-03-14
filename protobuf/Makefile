@@ -1,6 +1,7 @@
 LIBDIR=/usr/local/lib
 
-CXXFLAGS=-g -Wall -O0 -pthread
+PBFLAGS=$(shell pkg-config --cflags --libs-only-L protobuf)
+CXXFLAGS=-g -Wall -O0 -pthread $(PBFLAGS)
 LDFLAGS=-lprotobuf -lz -lpthread -Wl,-rpath -Wl,$(LIBDIR)
 
 BINARIES=codec_test descriptor_test dispatcher_lite dispatcher
@@ -33,4 +34,3 @@ test: codec_test
 clean:
 	rm -f query.pb.*
 	rm -f $(BINARIES)
-
