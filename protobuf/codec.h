@@ -10,11 +10,11 @@
 
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/message.h>
-#include <zlib.h>  // adler32
+#include <zlib.h> // adler32
 
 #include <string>
 
-#include <arpa/inet.h>  // htonl, ntohl
+#include <arpa/inet.h> // htonl, ntohl
 #include <stdint.h>
 
 // struct ProtobufTransportFormat __attribute__ ((__packed__))
@@ -33,61 +33,55 @@ const int kHeaderLen = sizeof(int32_t);
 ///
 /// returns a empty string if message.AppendToString() fails.
 ///
-inline std::string encode(const google::protobuf::Message& message)
-{
+inline std::string encode(const google::protobuf::Message &message) {
   std::string result;
 
   result.resize(kHeaderLen);
 
-  const std::string& typeName = message.GetTypeName();
-  int32_t nameLen = static_cast<int32_t>(typeName.size()+1);
-  int32_t be32 = ::htonl(nameLen);
-  result.append(reinterpret_cast<char*>(&be32), sizeof be32);
+  const std::string &typeName = message.GetTypeName();
+  int32_t nameLen             = static_cast<int32_t>(typeName.size() + 1);
+  int32_t be32                = htonl(nameLen);
+  result.append(reinterpret_cast<char *>(&be32), sizeof be32);
   result.append(typeName.c_str(), nameLen);
   bool succeed = message.AppendToString(&result);
 
-  if (succeed)
-  {
-    const char* begin = result.c_str() + kHeaderLen;
-    int32_t checkSum = adler32(1, reinterpret_cast<const Bytef*>(begin), result.size()-kHeaderLen);
-    int32_t be32 = ::htonl(checkSum);
-    result.append(reinterpret_cast<char*>(&be32), sizeof be32);
-    
-    int32_t len = ::htonl(result.size() - kHeaderLen);
-    std::copy(reinterpret_cast<char*>(&len),
-              reinterpret_cast<char*>(&len) + sizeof len,
-              result.begin());
-  }
-  else
-  {
+  if (succeed) {
+    const char *begin = result.c_str() + kHeaderLen;
+    int32_t checkSum  = adler32(1, reinterpret_cast<const Bytef *>(begin),
+                               result.size() - kHeaderLen);
+    int32_t be32 = htonl(checkSum);
+    result.append(reinterpret_cast<char *>(&be32), sizeof be32);
+
+    int32_t len = htonl(result.size() - kHeaderLen);
+    std::copy(reinterpret_cast<char *>(&len),
+              reinterpret_cast<char *>(&len) + sizeof len, result.begin());
+  } else {
     result.clear();
   }
 
   return result;
 }
 
-inline google::protobuf::Message* createMessage(const std::string& type_name)
-{
-  google::protobuf::Message* message = NULL;
-  const google::protobuf::Descriptor* descriptor =
-    google::protobuf::DescriptorPool::generated_pool()->FindMessageTypeByName(type_name);
-  if (descriptor)
-  {
-    const google::protobuf::Message* prototype =
-      google::protobuf::MessageFactory::generated_factory()->GetPrototype(descriptor);
-    if (prototype)
-    {
+inline google::protobuf::Message *createMessage(const std::string &type_name) {
+  google::protobuf::Message *message = NULL;
+  const google::protobuf::Descriptor *descriptor =
+      google::protobuf::DescriptorPool::generated_pool()->FindMessageTypeByName(
+          type_name);
+  if (descriptor) {
+    const google::protobuf::Message *prototype =
+        google::protobuf::MessageFactory::generated_factory()->GetPrototype(
+            descriptor);
+    if (prototype) {
       message = prototype->New();
     }
   }
   return message;
 }
 
-inline int32_t asInt32(const char* buf)
-{
+inline int32_t asInt32(const char *buf) {
   int32_t be32 = 0;
   ::memcpy(&be32, buf, sizeof(be32));
-  return ::ntohl(be32);
+  return ntohl(be32);
 }
 
 ///
@@ -96,49 +90,37 @@ inline int32_t asInt32(const char* buf)
 ///
 /// returns NULL if fails.
 ///
-inline google::protobuf::Message* decode(const std::string& buf)
-{
-  google::protobuf::Message* result = NULL;
+inline google::protobuf::Message *decode(const std::string &buf) {
+  google::protobuf::Message *result = NULL;
 
   int32_t len = static_cast<int32_t>(buf.size());
-  if (len >= 10)
-  {
+  if (len >= 10) {
     int32_t expectedCheckSum = asInt32(buf.c_str() + buf.size() - kHeaderLen);
-    const char* begin = buf.c_str();
-    int32_t checkSum = adler32(1, reinterpret_cast<const Bytef*>(begin), len-kHeaderLen);
-    if (checkSum == expectedCheckSum)
-    {
+    const char *begin        = buf.c_str();
+    int32_t checkSum =
+        adler32(1, reinterpret_cast<const Bytef *>(begin), len - kHeaderLen);
+    if (checkSum == expectedCheckSum) {
       int32_t nameLen = asInt32(buf.c_str());
-      if (nameLen >= 2 && nameLen <= len - 2*kHeaderLen)
-      {
-        std::string typeName(buf.begin() + kHeaderLen, buf.begin() + kHeaderLen + nameLen - 1);
-        google::protobuf::Message* message = createMessage(typeName);
-        if (message)
-        {
-          const char* data = buf.c_str() + kHeaderLen + nameLen;
-          int32_t dataLen = len - nameLen - 2*kHeaderLen;
-          if (message->ParseFromArray(data, dataLen))
-          {
+      if (nameLen >= 2 && nameLen <= len - 2 * kHeaderLen) {
+        std::string typeName(buf.begin() + kHeaderLen,
+                             buf.begin() + kHeaderLen + nameLen - 1);
+        google::protobuf::Message *message = createMessage(typeName);
+        if (message) {
+          const char *data = buf.c_str() + kHeaderLen + nameLen;
+          int32_t dataLen  = len - nameLen - 2 * kHeaderLen;
+          if (message->ParseFromArray(data, dataLen)) {
             result = message;
-          }
-          else
-          {
+          } else {
             // parse error
             delete message;
           }
-        }
-        else
-        {
+        } else {
           // unknown message type
         }
-      }
-      else
-      {
+      } else {
         // invalid name len
       }
-    }
-    else
-    {
+    } else {
       // check sum error
     }
   }
@@ -146,4 +128,4 @@ inline google::protobuf::Message* decode(const std::string& buf)
   return result;
 }
 
-#endif  // PROTOBUF_CODEC_H
+#endif // PROTOBUF_CODEC_H
